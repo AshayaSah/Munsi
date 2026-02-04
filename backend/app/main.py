@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import RedirectResponse, JSONResponse, PlainTextResponse, HTMLResponse
 from pydantic import BaseModel
 import httpx
 import os
@@ -17,7 +17,7 @@ load_dotenv()
 # CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,7 +26,7 @@ app.add_middleware(
 FB_APP_ID = os.getenv("FB_APP_ID")
 FB_APP_SECRET = os.getenv("FB_APP_SECRET")
 FB_REDIRECT_URI = os.getenv("FB_REDIRECT_URI", "http://localhost:8000/auth/facebook/callback")
-VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "your_secure_verify_token_here")
+VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "SIUUU")
 
 # Store tokens in memory (use database in production)
 user_tokens = {}
@@ -53,25 +53,24 @@ def read_root():
 # ==================== WEBHOOK ENDPOINTS ====================
 
 @app.get("/webhook")
-async def verify_webhook(
-    hub_mode: Optional[str] = None,
-    hub_verify_token: Optional[str] = None,
-    hub_challenge: Optional[str] = None
-):
-    """
-    Webhook verification endpoint for Facebook
-    Facebook will call this to verify your webhook
-    """
-    print(f"Webhook verification attempt - Mode: {hub_mode}, Token: {hub_verify_token}")
+async def verify_webhook(request: Request):
+    # Log all query parameters
+    print(f"All query params: {dict(request.query_params)}")
+    
+    hub_mode = request.query_params.get("hub.mode")
+    hub_verify_token = request.query_params.get("hub.verify_token")
+    hub_challenge = request.query_params.get("hub.challenge")
+    
+    print(f"Mode: {hub_mode}, Token: {hub_verify_token}, Challenge: {hub_challenge}")
+    print(f"Expected Token: {VERIFY_TOKEN}")
     
     if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
         print("✅ Webhook verified successfully!")
         return PlainTextResponse(content=hub_challenge)
     else:
-        print("❌ Webhook verification failed!")
+        print("❌ Verification failed!")
         raise HTTPException(status_code=403, detail="Verification failed")
-
-
+    
 @app.post("/webhook")
 async def receive_webhook(request: Request):
     """
@@ -79,6 +78,11 @@ async def receive_webhook(request: Request):
     This is called whenever someone sends a message to your page
     """
     try:
+        # Log that endpoint was hit
+        print("\n" + "🔔 WEBHOOK ENDPOINT HIT!")
+        print(f"Request method: {request.method}")
+        print(f"Request headers: {dict(request.headers)}")
+
         body = await request.json()
         print("\n" + "="*50)
         print("📨 Webhook received:", body)
@@ -160,6 +164,26 @@ async def receive_webhook(request: Request):
         traceback.print_exc()
         # Still return 200 to avoid Facebook retrying
         return {"status": "error", "message": str(e)}
+    
+# Add a health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
+# Add middleware to log ALL requests
+@app.middleware("http")
+async def ngrok_skip_browser_warning(request: Request, call_next):
+    # Log incoming request
+    print(f"\n🔔 Request from: {request.client.host if request.client else 'unknown'}")
+    print(f"   Path: {request.url.path}")
+    print(f"   Headers: {dict(request.headers)}")
+    
+    response = await call_next(request)
+    
+    # Add ngrok skip header to response
+    response.headers["ngrok-skip-browser-warning"] = "69420"
+    
+    return response
 
 
 async def process_incoming_message(message_data: dict):
@@ -243,6 +267,21 @@ async def subscribe_page_to_webhook(page_id: str, page_access_token: str):
         print(f"✅ Page {page_id} subscribed to webhook")
         return response.json()
 
+# Alternative: If you want a separate dashboard route
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    """
+    Messenger Dashboard
+    """
+    dashboard_path = Path(__file__).parent / "messenger_dashboard.html"
+    
+    if dashboard_path.exists():
+        return HTMLResponse(content=dashboard_path.read_text())
+    else:
+        return HTMLResponse(content="""
+            <h1>Dashboard not found</h1>
+            <p>Please make sure messenger_dashboard.html is in the same directory as your Python file</p>
+        """)
 
 # ==================== EXISTING OAUTH ENDPOINTS ====================
 
