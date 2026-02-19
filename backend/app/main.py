@@ -8,6 +8,9 @@ import httpx
 import os
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
+from google import genai
+from token_manager import TokenManager
+
 
 app = FastAPI()
 
@@ -27,7 +30,9 @@ FB_APP_ID = os.getenv("FB_APP_ID")
 FB_APP_SECRET = os.getenv("FB_APP_SECRET")
 FB_REDIRECT_URI = os.getenv("FB_REDIRECT_URI", "http://localhost:8000/auth/facebook/callback")
 VERIFY_TOKEN = os.getenv("WEBHOOK_VERIFY_TOKEN", "SIUUU")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+gu = genai.Client()
 # Store tokens in memory (use database in production)
 user_tokens = {}
 
@@ -204,11 +209,12 @@ async def process_incoming_message(message_data: dict):
     # - etc.
     
     # Example: Simple auto-reply for specific keywords
-    # if message_text and "hello" in message_text.lower():
-    #     await send_auto_reply(message_data["recipient_id"], sender_id, "Hello! How can I help you?")
+    if message_text:
+        token = TokenManager.get_token()
+        await send_auto_reply(sender_id, "Hello! How can I help you?", token)
 
 
-async def send_auto_reply(page_id: str, recipient_id: str, message_text: str, page_access_token: str):
+async def send_auto_reply(recipient_id: str, message_text: str, page_access_token: str):
     """
     Send an auto-reply to a user
     """
@@ -283,6 +289,19 @@ async def dashboard():
             <p>Please make sure messenger_dashboard.html is in the same directory as your Python file</p>
         """)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ==================== EXISTING OAUTH ENDPOINTS ====================
 
 @app.get("/auth/facebook/login")
@@ -332,6 +351,10 @@ async def facebook_callback(code: str):
         
         token_data = response.json()
         access_token = token_data.get("access_token")
+
+        TokenManager.set_token(
+            token=access_token
+        )
         
         user_info_url = f"https://graph.facebook.com/v18.0/me?access_token={access_token}&fields=id,name,email"
         user_response = await client.get(user_info_url)
@@ -342,9 +365,8 @@ async def facebook_callback(code: str):
             "access_token": access_token,
             "user_data": user_data
         }
+        print(user_tokens)
 
-        print("User ID:", access_token)
-        
         frontend_url = f"http://localhost:5173?user_id={user_id}&access_token={access_token}&logged_in=true"
         return RedirectResponse(url=frontend_url)
 
@@ -517,6 +539,31 @@ async def send_message(
             )
         
         return send_response.json()
+    
+
+
+
+
+
+class AIRequest(BaseModel):
+    msg: str
+
+
+# TEst
+@app.post("/api/get_ai_res")
+async def get_ai_res(payload: AIRequest):
+    msg = payload.msg
+    print(msg)
+
+    if not msg:
+        return {"error": "Message is empty"}
+
+    response = gu.models.generate_content(
+        model="gemini-3-flash-preview",
+        contents=msg
+    )
+
+    return {"reply": response.text}
 
 
 @app.get("/health")
