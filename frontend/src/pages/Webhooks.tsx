@@ -32,6 +32,9 @@ const MessengerDashboard: React.FC = () => {
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
 
+  const [aimsg, setAimsg] = useState("");
+  const [aires, setAires] = useState("");
+
   // const APIURL =
   //   "https://gyrostatic-galvanoplastically-marjorie.ngrok-free.dev";
   const APIURL = "http://localhost:8000";
@@ -59,6 +62,35 @@ const MessengerDashboard: React.FC = () => {
       setMessages(data.messages || []);
       setLastUpdated(new Date().toLocaleTimeString());
       setError("");
+    } catch (err) {
+      console.error("Error fetching messages:", err);
+      setError(err instanceof Error ? err.message : "Failed to fetch messages");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getAiRes = async () => {
+    try {
+      const url = `${APIURL}/api/get_ai_res`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          msg: aimsg, // 👈 send whatever data you need
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(data);
+      setAires(data.reply);
+      setError("");
+      setAimsg("");
     } catch (err) {
       console.error("Error fetching messages:", err);
       setError(err instanceof Error ? err.message : "Failed to fetch messages");
@@ -115,6 +147,29 @@ const MessengerDashboard: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-800">
               Facebook Messenger Dashboard
             </h1>
+          </div>
+
+          <div className="flex flex-col bg-white p-5 rounded-xl border border-gray-200 gap-4 shadow-sm">
+            <div className="flex align-center gap-4">
+              <input
+                type="text"
+                value={aimsg}
+                onChange={(e) => setAimsg(e.target.value)}
+                placeholder="Type your message..."
+                className="w-full px-4 py-3 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-400 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-400"
+              />
+
+              <button
+                onClick={getAiRes}
+                className="self-end px-6 py-2 rounded-lg bg-black text-white font-medium hover:bg-gray-800 transition"
+              >
+                Send
+              </button>
+            </div>
+
+            <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <p className="text-gray-900 whitespace-pre-wrap">{aires}</p>
+            </div>
           </div>
 
           {/* Stats */}
