@@ -7,6 +7,7 @@ import {
   User,
   Check,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -24,6 +25,8 @@ export default function MessengerApp() {
   const [participant, setParticipant] = useState("");
   const [participants, setParticipants] = useState([]);
   const [message, setMessage] = useState("");
+
+  const navigate = useNavigate();
 
   const [messageCount, setMessageCount] = useState(0);
 
@@ -220,6 +223,7 @@ export default function MessengerApp() {
                   Manage your Facebook conversations
                 </p>
               </div>
+              <div onClick={() => navigate("/webhook")}>Go to Webhook</div>
             </div>
             {isLoggedIn && (
               <button

@@ -198,6 +198,7 @@ async def process_incoming_message(message_data: dict):
     """
     sender_id = message_data["sender_id"]
     message_text = message_data["message_text"]
+    recipient_id = message_data["recipient_id"]
     
     print(f"🔄 Processing message from {sender_id}: {message_text}")
     
@@ -210,7 +211,9 @@ async def process_incoming_message(message_data: dict):
     
     # Example: Simple auto-reply for specific keywords
     if message_text:
-        token = TokenManager.get_token()
+        # token = TokenManager.get_token()
+        token = user_tokens["3257350697760944"]["access_token"]
+        print(token)
         await send_auto_reply(sender_id, "Hello! How can I help you?", token)
 
 
@@ -218,6 +221,9 @@ async def send_auto_reply(recipient_id: str, message_text: str, page_access_toke
     """
     Send an auto-reply to a user
     """
+
+    print(page_access_token)
+
     send_url = f"https://graph.facebook.com/v18.0/me/messages?access_token={page_access_token}"
     payload = {
         "recipient": {"id": recipient_id},
