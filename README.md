@@ -5,4 +5,4 @@ This is a **Final Year Project (FYP)** for managing GitHub folders using a FastA
 ## Project Overview
 
 - Backend: FastAPI (Python)
-- Frontend: React with Vite + SWC
+- Frontend: React with Typescript
