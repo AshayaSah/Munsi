@@ -124,6 +124,7 @@ export interface ConversationListItemProps {
   conversation: Conversation;
   isSelected: boolean;
   onSelect: (id: string, participants: ConversationParticipant[]) => void;
+  isLoading: boolean;
 }
 
 export interface WebhookMessageItemProps {
