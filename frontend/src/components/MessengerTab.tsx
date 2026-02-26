@@ -112,7 +112,7 @@ const ConversationListItem: React.FC<
   <button
     disabled={isLoading}
     className={cn(
-      "flex w-52 items-center justify-between rounded-md px-3 py-2 text-sm transition-all duration-150 text-left border",
+      "flex w-40 md:w-52 items-center justify-between rounded-md px-3 py-2 text-sm transition-all duration-150 text-left border",
       isSelected
         ? "bg-primary text-primary-foreground shadow-sm"
         : "hover:bg-muted text-foreground",
@@ -318,7 +318,7 @@ const MessengerTab: React.FC = () => {
     */
     <div className="flex h-full min-h-0 overflow-hidden rounded-lg border bg-background">
       {/* ── Left sidebar ─────────────────────────────────────────────────── */}
-      <div className="flex w-64 shrink-0 flex-col gap-2.5 border-r pr-3 min-h-0 overflow-hidden">
+      <div className="flex md:w-64 shrink-0 flex-col gap-2.5 border-r pr-3 min-h-0 overflow-hidden">
         {/* Error banner */}
         {error && (
           <Alert variant="destructive" className="py-2 shrink-0">

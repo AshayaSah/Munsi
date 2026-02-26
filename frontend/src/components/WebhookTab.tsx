@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   RefreshCw,
-  Send,
   MessageSquare,
   Users,
   Clock,
   Pause,
   Play,
   Trash2,
+  Activity,
+  X,
+  Radio,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -23,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 import type {
   WebhookMessage,
@@ -31,53 +36,129 @@ import type {
 
 const API_BASE_URL = "http://localhost:8000";
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Skeletons ────────────────────────────────────────────────────────────────
 
-const WebhookMessageItem: React.FC<WebhookMessageItemProps> = ({ message }) => (
-  <div className="py-4 border-b last:border-0">
-    <div className="flex items-center gap-3 mb-2">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
-        {message.sender_id.substring(0, 2).toUpperCase()}
-      </div>
-      <p className="flex-1 truncate text-sm font-semibold">
-        ID: {message.sender_id}
-      </p>
-      <span className="shrink-0 text-xs text-muted-foreground">
-        {new Date(message.timestamp).toLocaleString()}
-      </span>
-    </div>
-    {message.message_text && (
-      <p className="ml-11 rounded-md border-l-2 border-primary bg-muted px-3 py-2 text-sm text-foreground">
-        {message.message_text}
-      </p>
-    )}
-    <div className="ml-11 mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <span>📧 {message.message_id || "N/A"}</span>
-      {message.attachments?.length > 0 && (
-        <Badge variant="secondary" className="text-xs">
-          📎 {message.attachments.length} attachment
-          {message.attachments.length > 1 ? "s" : ""}
-        </Badge>
-      )}
-    </div>
+const StatSkeleton = () => (
+  <div className="grid grid-cols-3 gap-2 shrink-0">
+    {[...Array(3)].map((_, i) => (
+      <Card key={i} className="shadow-none border-border/60">
+        <CardContent className="flex items-center gap-2.5 p-3">
+          <Skeleton className="h-7 w-7 rounded-full shrink-0" />
+          <div className="space-y-1 flex-1">
+            <Skeleton className="h-2 w-16 rounded" />
+            <Skeleton className="h-4 w-10 rounded" />
+          </div>
+        </CardContent>
+      </Card>
+    ))}
   </div>
 );
+
+const MessageSkeleton = () => (
+  <div className="space-y-2 px-1">
+    {[...Array(4)].map((_, i) => (
+      <div key={i} className="py-2 border-b last:border-0">
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <Skeleton className="h-6 w-6 rounded-full shrink-0" />
+          <Skeleton className="h-3 w-32 rounded flex-1" />
+          <Skeleton className="h-2.5 w-20 rounded shrink-0" />
+        </div>
+        <Skeleton className="ml-8 h-8 w-full rounded-md" />
+      </div>
+    ))}
+  </div>
+);
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const WebhookMessageItem: React.FC<
+  WebhookMessageItemProps & { index: number }
+> = ({ message, index }) => {
+  const initials = message.sender_id.substring(0, 2).toUpperCase();
+  const colors = [
+    "bg-violet-500",
+    "bg-blue-500",
+    "bg-emerald-500",
+    "bg-orange-500",
+    "bg-pink-500",
+    "bg-cyan-500",
+  ];
+  const colorClass =
+    colors[parseInt(message.sender_id, 36) % colors.length] ??
+    colors[index % colors.length];
+
+  return (
+    <div className="py-2 border-b last:border-0 group transition-colors hover:bg-muted/30 -mx-2 px-2 rounded-md">
+      <div className="flex items-center gap-2.5 mb-1">
+        <div
+          className={cn(
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-bold shadow-sm",
+            colorClass,
+          )}
+        >
+          {initials}
+        </div>
+        <p className="flex-1 truncate text-xs font-medium text-foreground">
+          {message.sender_id}
+        </p>
+        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+          {new Date(message.timestamp).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
+        </span>
+      </div>
+      {message.message_text && (
+        <div className="ml-8 rounded-md border-l-2 border-primary/60 bg-muted/60 px-2.5 py-1.5 text-xs text-foreground leading-relaxed">
+          {message.message_text}
+        </div>
+      )}
+      <div className="ml-8 mt-1 flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[200px]">
+          {message.message_id || "no-id"}
+        </span>
+        {message.attachments?.length > 0 && (
+          <Badge variant="secondary" className="text-[11px] h-4 px-1">
+            📎 {message.attachments.length} attachment
+            {message.attachments.length > 1 ? "s" : ""}
+          </Badge>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const StatCard: React.FC<{
   icon: React.ReactNode;
   label: string;
   value: string | number;
-}> = ({ icon, label, value }) => (
-  <Card>
-    <CardContent className="flex items-center gap-3 p-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+  accent?: boolean;
+}> = ({ icon, label, value, accent }) => (
+  <Card
+    className={cn(
+      "shadow-none border-border/60 transition-colors",
+      accent && "border-primary/30 bg-primary/5",
+    )}
+  >
+    <CardContent className="flex items-center gap-2.5 p-3">
+      <div
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+          accent
+            ? "bg-primary/10 text-primary"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground truncate">
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium truncate">
           {label}
         </p>
-        <p className="text-lg font-bold leading-tight">{value}</p>
+        <p className="text-base font-bold leading-tight tabular-nums">
+          {value}
+        </p>
       </div>
     </CardContent>
   </Card>
@@ -89,61 +170,49 @@ const WebhookTab: React.FC = () => {
   const [webhookMessages, setWebhookMessages] = useState<WebhookMessage[]>([]);
   const [isAutoRefresh, setIsAutoRefresh] = useState<boolean>(true);
   const [refreshInterval, setRefreshInterval] = useState<number>(5000);
-  const [lastUpdated, setLastUpdated] = useState<string>("Never");
+  const [lastUpdated, setLastUpdated] = useState<string>("—");
   const [apiUrl, setApiUrl] = useState<string>("");
-  const [aimsg, setAimsg] = useState<string>("");
-  const [aires, setAires] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
+  const [initialLoading, setInitialLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
   // ── Fetch webhook messages ─────────────────────────────────────────────
-  const fetchWebhookMessages = useCallback(async (): Promise<void> => {
-    try {
-      const url = apiUrl.trim() || `${API_BASE_URL}/api/recent-messages`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      setWebhookMessages(data.messages || []);
-      setLastUpdated(new Date().toLocaleTimeString());
-      setError("");
-    } catch (err) {
-      setError((err as Error).message || "Failed to fetch messages");
-    }
-  }, [apiUrl]);
+  const fetchWebhookMessages = useCallback(
+    async (isInitial = false): Promise<void> => {
+      try {
+        const url = apiUrl.trim() || `${API_BASE_URL}/api/recent-messages`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setWebhookMessages(data.messages || []);
+        setLastUpdated(
+          new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+        );
+        setError("");
+      } catch (err) {
+        setError((err as Error).message || "Failed to fetch messages");
+      } finally {
+        if (isInitial) setInitialLoading(false);
+      }
+    },
+    [apiUrl],
+  );
 
+  // Auto-load on mount
   useEffect(() => {
-    fetchWebhookMessages();
-  }, [fetchWebhookMessages]);
+    fetchWebhookMessages(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!isAutoRefresh) return;
-    const id = setInterval(fetchWebhookMessages, refreshInterval);
+    const id = setInterval(() => fetchWebhookMessages(false), refreshInterval);
     return () => clearInterval(id);
   }, [isAutoRefresh, refreshInterval, fetchWebhookMessages]);
 
-  // ── AI response ────────────────────────────────────────────────────────
-  const getAiRes = async (): Promise<void> => {
-    if (!aimsg.trim()) return;
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/get_ai_res`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ msg: aimsg }),
-      });
-      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-      const data = await res.json();
-      setAires(data.reply as string);
-      setAimsg("");
-    } catch (err) {
-      setError((err as Error).message || "Failed to get AI response");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ── Derived ────────────────────────────────────────────────────────────
   const uniqueSenders = new Set(webhookMessages.map((m) => m.sender_id)).size;
   const sortedWebhook = [...webhookMessages].sort(
     (a, b) => b.timestamp - a.timestamp,
@@ -151,29 +220,36 @@ const WebhookTab: React.FC = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <ScrollArea className="h-full">
-      <div className="flex flex-col gap-4 p-5">
-        {/* Error */}
-        {error && (
-          <Alert variant="destructive" className="py-2">
-            <AlertDescription className="flex items-center justify-between text-xs">
-              <span>{error}</span>
-              <button
-                onClick={() => setError("")}
-                className="ml-2 shrink-0 opacity-70 hover:opacity-100"
-              >
-                ✕
-              </button>
-            </AlertDescription>
-          </Alert>
-        )}
+    /*
+      h-full + min-h-0 + overflow-hidden: stays locked inside the dashboard.
+      Only the messages ScrollArea scrolls internally.
+    */
+    <div className="flex h-full min-h-0 flex-col gap-2.5 overflow-hidden">
+      {/* Error */}
+      {error && (
+        <Alert variant="destructive" className="py-1.5 shrink-0">
+          <AlertDescription className="flex items-center justify-between text-xs">
+            <span>{error}</span>
+            <button
+              onClick={() => setError("")}
+              className="ml-2 shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3">
+      {/* Stats row — always visible, never scrolls away */}
+      {initialLoading ? (
+        <StatSkeleton />
+      ) : (
+        <div className="grid grid-cols-3 gap-2 shrink-0">
           <StatCard
-            icon={<MessageSquare className="h-4 w-4" />}
+            icon={<Activity className="h-4 w-4" />}
             label="Total Messages"
             value={webhookMessages.length}
+            accent={webhookMessages.length > 0}
           />
           <StatCard
             icon={<Users className="h-4 w-4" />}
@@ -186,100 +262,96 @@ const WebhookTab: React.FC = () => {
             value={lastUpdated}
           />
         </div>
+      )}
 
-        {/* AI Agent */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground">
-              AI Agent Test
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex gap-2">
-              <Input
-                value={aimsg}
-                onChange={(e) => setAimsg(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && getAiRes()}
-                placeholder="Send a message to the AI agent…"
-                className="flex-1"
-                disabled={loading}
-              />
-              <Button
-                size="icon"
-                onClick={getAiRes}
-                disabled={loading || !aimsg.trim()}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-            {aires && (
-              <div className="rounded-md border bg-muted p-3">
-                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Agent reply
-                </p>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {aires}
-                </p>
+      {/* Middle section: AI Agent + Controls side by side on wide screens, stacked on narrow */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 shrink-0">
+        {/* Controls card */}
+        <Card className="shadow-none border-border/60">
+          <CardHeader className="px-3 pb-1.5 pt-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-5 w-5 items-center justify-center rounded-md bg-muted">
+                  <Radio className="h-3 w-3 text-muted-foreground" />
+                </div>
+                <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Live Controls
+                </CardTitle>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Controls */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground">
-              Controls
-            </CardTitle>
+              {isAutoRefresh && (
+                <Badge
+                  variant="outline"
+                  className="gap-1.5 border-emerald-300 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400"
+                >
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                  Live
+                </Badge>
+              )}
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-center gap-2">
+          <CardContent className="px-3 pb-3">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={fetchWebhookMessages}
+                className="gap-1.5 h-8"
+                onClick={() => fetchWebhookMessages(false)}
               >
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                <RefreshCw className="h-3.5 w-3.5" />
                 Refresh
               </Button>
+
               <Button
                 variant="outline"
                 size="sm"
+                className={cn(
+                  "gap-1.5 h-8",
+                  isAutoRefresh
+                    ? "text-amber-600 border-amber-200 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-900 dark:hover:bg-amber-950/30"
+                    : "text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-900 dark:hover:bg-emerald-950/30",
+                )}
                 onClick={() => setIsAutoRefresh((p) => !p)}
               >
                 {isAutoRefresh ? (
                   <>
-                    <Pause className="mr-2 h-3.5 w-3.5" />
+                    <Pause className="h-3.5 w-3.5" />
                     Pause
                   </>
                 ) : (
                   <>
-                    <Play className="mr-2 h-3.5 w-3.5" />
+                    <Play className="h-3.5 w-3.5" />
                     Resume
                   </>
                 )}
               </Button>
+
               <Button
-                variant="destructive"
+                variant="ghost"
                 size="sm"
+                className="gap-1.5 h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={() => setWebhookMessages([])}
               >
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                <Trash2 className="h-3.5 w-3.5" />
                 Clear
               </Button>
+
+              <Separator
+                orientation="vertical"
+                className="h-6 hidden sm:block"
+              />
 
               <Select
                 value={String(refreshInterval)}
                 onValueChange={(v) => setRefreshInterval(Number(v))}
               >
-                <SelectTrigger className="h-8 w-36">
+                <SelectTrigger className="h-8 w-36 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="2000">Every 2 seconds</SelectItem>
-                  <SelectItem value="5000">Every 5 seconds</SelectItem>
-                  <SelectItem value="10000">Every 10 seconds</SelectItem>
-                  <SelectItem value="30000">Every 30 seconds</SelectItem>
+                  <SelectItem value="2000">Every 2s</SelectItem>
+                  <SelectItem value="5000">Every 5s</SelectItem>
+                  <SelectItem value="10000">Every 10s</SelectItem>
+                  <SelectItem value="30000">Every 30s</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -287,58 +359,78 @@ const WebhookTab: React.FC = () => {
                 placeholder="Custom API URL (optional)"
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
-                className="h-8 flex-1 min-w-[180px] text-xs"
+                className="h-8 flex-1 min-w-[160px] text-xs bg-background"
               />
-
-              {isAutoRefresh && (
-                <Badge
-                  variant="outline"
-                  className="gap-1.5 border-green-300 bg-green-50 text-green-600"
-                >
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-                  Live
-                </Badge>
-              )}
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Messages */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground">
-                Recent Messages
-              </CardTitle>
-              <Badge variant="secondary" className="text-xs">
-                {webhookMessages.length}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="px-4 pb-2">
-            {sortedWebhook.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                  <MessageSquare className="h-6 w-6 opacity-40" />
-                </div>
-                <p className="text-sm">No messages received yet</p>
-                <p className="text-xs text-muted-foreground/70">
-                  Messages will appear here when users send them to your page
-                </p>
-              </div>
-            ) : (
-              sortedWebhook.map((msg, i) => (
-                <WebhookMessageItem
-                  key={`${msg.message_id}-${i}`}
-                  message={msg}
-                  index={i}
-                />
-              ))
-            )}
           </CardContent>
         </Card>
       </div>
-    </ScrollArea>
+
+      {/* Messages card — flex-1 + min-h-0 fills remaining space, ScrollArea handles overflow */}
+      <Card className="shadow-none border-border/60 flex-1 min-h-0 flex flex-col overflow-hidden">
+        <CardHeader className="px-3 pb-1.5 pt-3 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-5 w-5 items-center justify-center rounded-md bg-muted">
+                <MessageSquare className="h-3 w-3 text-muted-foreground" />
+              </div>
+              <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Recent Messages
+              </CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              {webhookMessages.length > 0 && (
+                <Badge variant="secondary" className="text-xs tabular-nums">
+                  {webhookMessages.length}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+
+        <Separator className="shrink-0" />
+
+        {/* Only this ScrollArea scrolls */}
+        <CardContent className="flex-1 min-h-0 p-0 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="px-3 py-1">
+              {initialLoading ? (
+                <MessageSkeleton />
+              ) : sortedWebhook.length === 0 ? (
+                <div className="flex flex-col items-center gap-2.5 py-10 text-muted-foreground">
+                  <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
+                    <MessageSquare className="h-5 w-5 opacity-30" />
+                    {isAutoRefresh && (
+                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500">
+                        <span className="h-2 w-2 animate-ping rounded-full bg-white opacity-75" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-center space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">
+                      No messages yet
+                    </p>
+                    <p className="text-xs text-muted-foreground max-w-[220px] leading-relaxed">
+                      {isAutoRefresh
+                        ? "Listening for incoming messages…"
+                        : "Auto-refresh is paused. Click Resume to start listening."}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                sortedWebhook.map((msg, i) => (
+                  <WebhookMessageItem
+                    key={`${msg.message_id}-${i}`}
+                    message={msg}
+                    index={i}
+                  />
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
