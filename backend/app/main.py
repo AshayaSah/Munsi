@@ -200,7 +200,7 @@ async def process_incoming_message(message_data: dict):
     message_text = message_data["message_text"]
     recipient_id = message_data["recipient_id"]
     
-    print(f"🔄 Processing message from {sender_id}: {message_text}")
+    print(f"🔄 Processing message from {sender_id}: {message_text} for {recipient_id}")
     
     # TODO: Add your custom logic here:
     # - Save to database
@@ -208,23 +208,30 @@ async def process_incoming_message(message_data: dict):
     # - Auto-reply with specific keywords
     # - Forward to customer service
     # - etc.
+
+    payload = AIRequest(msg=message_text)
+
+    ai_res = await get_ai_res(payload = payload)
+    ai_reply = ai_res.get("reply", "Sorry, I couldn't process that.")
+    print(ai_reply)
     
     # Example: Simple auto-reply for specific keywords
     if message_text:
         # token = TokenManager.get_token()
         token = user_tokens["3257350697760944"]["access_token"]
         print(token)
-        await send_auto_reply(sender_id, "Hello! How can I help you?", token)
+        # await send_auto_reply(sender_id, "Hello! How can I help you?", token, recipient_id)
+        await send_message(token, recipient_id, sender_id, ai_reply)
 
 
-async def send_auto_reply(recipient_id: str, message_text: str, page_access_token: str):
+async def send_auto_reply(recipient_id: str, message_text: str, page_access_token: str, page_id: "3257350697760944"):
     """
     Send an auto-reply to a user
     """
 
     print(page_access_token)
 
-    send_url = f"https://graph.facebook.com/v18.0/me/messages?access_token={page_access_token}"
+    send_url = f"https://graph.facebook.com/v18.0/{page_id}/messages?access_token={page_access_token}"
     payload = {
         "recipient": {"id": recipient_id},
         "message": {"text": message_text}
