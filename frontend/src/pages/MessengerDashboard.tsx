@@ -50,7 +50,8 @@ import type {
   ConversationListItemProps,
   BubbleProps,
   WebhookMessageItemProps,
-} from "./dashboard.types";
+} from "../types/dashboard.types";
+import { useAuth } from "@/context/AuthContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -167,10 +168,10 @@ const WebhookMessageItem: React.FC<WebhookMessageItemProps> = ({ message }) => (
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const UnifiedDashboard: React.FC = () => {
-  // ── Auth ────────────────────────────────────────────────────────────────
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [accessToken, setAccessToken] = useState<string>("");
-  const [userName, setUserName] = useState<string>("");
+  // ── Auth (from context) ─────────────────────────────────────────────────
+  const { user, isLoggedIn, logout } = useAuth();
+  const accessToken = user?.accessToken ?? "";
+  const userName = user?.userId ?? "";
 
   // ── Navigation ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabId>("messenger");
@@ -203,38 +204,9 @@ const UnifiedDashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
-  // ─── OAuth redirect check ──────────────────────────────────────────────
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get("user_id");
-    const loggedIn = urlParams.get("logged_in");
-    const access_token = urlParams.get("access_token");
-    if (userId && loggedIn && access_token) {
-      setIsLoggedIn(true);
-      setUserName(userId);
-      setAccessToken(access_token);
-      window.history.replaceState({}, document.title, "/");
-    }
-  }, []);
-
   // ─── Auth handlers ─────────────────────────────────────────────────────
-  const handleLogin = (): void => {
-    window.location.href = `${API_BASE_URL}/auth/facebook/login`;
-  };
-
-  const handleManualToken = (): void => {
-    const token = prompt("Enter your Facebook access token:");
-    if (token) {
-      setAccessToken(token);
-      setIsLoggedIn(true);
-      setError("");
-    }
-  };
-
   const handleLogout = (): void => {
-    setIsLoggedIn(false);
-    setAccessToken("");
-    setUserName("");
+    logout();
     setPages([]);
     setConversations([]);
     setMessages([]);
@@ -331,8 +303,6 @@ const UnifiedDashboard: React.FC = () => {
     if (!outMessage.trim() || !selectedPage) return;
     setLoading(true);
     setError("");
-
-    console.log(accessToken, selectedPage.id, participant);
     try {
       const res = await fetch(
         `${API_BASE_URL}/api/send-message?access_token=${accessToken}&page_id=${selectedPage.id}&recipient_id=${participant}&message_text=${encodeURIComponent(outMessage)}`,
@@ -400,48 +370,6 @@ const UnifiedDashboard: React.FC = () => {
   const sortedWebhook = [...webhookMessages].sort(
     (a, b) => b.timestamp - a.timestamp,
   );
-
-  // ─── Login screen ──────────────────────────────────────────────────────
-  if (!isLoggedIn) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Card className="w-[380px]">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary">
-              <MessageCircle className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <CardTitle className="text-2xl">Messenger Agent</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Connect your Facebook account to continue
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button className="w-full" onClick={handleLogin}>
-              Login with Facebook
-            </Button>
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={handleManualToken}
-            >
-              Use Access Token
-            </Button>
-
-            <Separator className="my-4" />
-
-            <div className="rounded-md bg-muted p-4 text-xs text-muted-foreground space-y-1">
-              <p className="font-semibold uppercase tracking-wide text-foreground">
-                Setup required
-              </p>
-              <p>pip install fastapi uvicorn httpx</p>
-              <p>Set FB_APP_ID and FB_APP_SECRET</p>
-              <p>python backend.py</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   // ─── Main dashboard ────────────────────────────────────────────────────
   return (
@@ -610,9 +538,9 @@ const UnifiedDashboard: React.FC = () => {
               </div>
 
               {/* Chat panel */}
-              <div className="flex flex-1 flex-col">
+              <div className="flex flex-1 flex-col overflow-hidden">
                 {messages.length > 0 ? (
-                  <div className="flex flex-col">
+                  <>
                     <div className="flex items-center justify-between border-b px-5 py-3">
                       <p className="font-semibold text-sm">Conversation</p>
                       <Badge variant="secondary">
@@ -620,7 +548,7 @@ const UnifiedDashboard: React.FC = () => {
                       </Badge>
                     </div>
 
-                    <ScrollArea className="flex-1 px-5 py-4 max-h-[50%]">
+                    <ScrollArea className="flex-1 px-5 py-4">
                       <div className="flex flex-col gap-3">
                         {[...messages].reverse().map((msg) => (
                           <Bubble
@@ -644,7 +572,7 @@ const UnifiedDashboard: React.FC = () => {
                         <Send className="h-4 w-4" />
                       </Button>
                     </div>
-                  </div>
+                  </>
                 ) : (
                   <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
                     <MessageCircle className="h-12 w-12 opacity-20" />
@@ -698,7 +626,7 @@ const UnifiedDashboard: React.FC = () => {
                 </div>
 
                 {/* AI Test */}
-                {/* <Card>
+                <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xs uppercase tracking-widest text-muted-foreground">
                       AI Agent Test
@@ -726,7 +654,7 @@ const UnifiedDashboard: React.FC = () => {
                       </div>
                     )}
                   </CardContent>
-                </Card> */}
+                </Card>
 
                 {/* Controls */}
                 <div className="flex flex-wrap items-center gap-2">
@@ -803,22 +731,20 @@ const UnifiedDashboard: React.FC = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4">
-                    <ScrollArea className="h-128">
-                      {sortedWebhook.length === 0 ? (
-                        <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
-                          <MessageSquare className="h-8 w-8 opacity-20" />
-                          <p className="text-sm">No messages received yet</p>
-                        </div>
-                      ) : (
-                        sortedWebhook.map((msg, i) => (
-                          <WebhookMessageItem
-                            key={`${msg.message_id}-${i}`}
-                            message={msg}
-                            index={i}
-                          />
-                        ))
-                      )}
-                    </ScrollArea>
+                    {sortedWebhook.length === 0 ? (
+                      <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
+                        <MessageSquare className="h-8 w-8 opacity-20" />
+                        <p className="text-sm">No messages received yet</p>
+                      </div>
+                    ) : (
+                      sortedWebhook.map((msg, i) => (
+                        <WebhookMessageItem
+                          key={`${msg.message_id}-${i}`}
+                          message={msg}
+                          index={i}
+                        />
+                      ))
+                    )}
                   </CardContent>
                 </Card>
               </div>
