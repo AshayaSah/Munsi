@@ -286,22 +286,6 @@ async def subscribe_page_to_webhook(page_id: str, page_access_token: str):
         print(f"✅ Page {page_id} subscribed to webhook")
         return response.json()
 
-# Alternative: If you want a separate dashboard route
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard():
-    """
-    Messenger Dashboard
-    """
-    dashboard_path = Path(__file__).parent / "messenger_dashboard.html"
-    
-    if dashboard_path.exists():
-        return HTMLResponse(content=dashboard_path.read_text())
-    else:
-        return HTMLResponse(content="""
-            <h1>Dashboard not found</h1>
-            <p>Please make sure messenger_dashboard.html is in the same directory as your Python file</p>
-        """)
-
 
 
 
@@ -584,6 +568,6 @@ def health_check():
     return {"status": "healthy"}
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
