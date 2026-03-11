@@ -313,7 +313,7 @@ def facebook_login():
         f"https://www.facebook.com/v18.0/dialog/oauth?"
         f"client_id={FB_APP_ID}"
         f"&redirect_uri={FB_REDIRECT_URI}"
-        f"&scope={scope}"
+        f"&scope={scope}" 
         f"&response_type=code"
     )
     
