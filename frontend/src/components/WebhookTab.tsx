@@ -29,10 +29,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-import type {
-  WebhookMessage,
-  WebhookMessageItemProps,
-} from "@/types/dashboard.types";
+import type { WebhookMessage } from "@/types/dashboard.types";
+import WebhookMessageItem from "./WebhookMessageItem";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -68,66 +66,6 @@ const MessageSkeleton = () => (
     ))}
   </div>
 );
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-const WebhookMessageItem: React.FC<
-  WebhookMessageItemProps & { index: number }
-> = ({ message, index }) => {
-  const initials = message.sender_id.substring(0, 2).toUpperCase();
-  const colors = [
-    "bg-violet-500",
-    "bg-blue-500",
-    "bg-emerald-500",
-    "bg-orange-500",
-    "bg-pink-500",
-    "bg-cyan-500",
-  ];
-  const colorClass =
-    colors[parseInt(message.sender_id, 36) % colors.length] ??
-    colors[index % colors.length];
-
-  return (
-    <div className="py-2 border-b last:border-0 group transition-colors hover:bg-muted/30 -mx-2 px-2 rounded-md">
-      <div className="flex items-center gap-2.5 mb-1">
-        <div
-          className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white text-[10px] font-bold shadow-sm",
-            colorClass,
-          )}
-        >
-          {initials}
-        </div>
-        <p className="flex-1 truncate text-xs font-medium text-foreground">
-          {message.sender_id}
-        </p>
-        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-          {new Date(message.timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          })}
-        </span>
-      </div>
-      {message.message_text && (
-        <div className="ml-8 rounded-md border-l-2 border-primary/60 bg-muted/60 px-2.5 py-1.5 text-xs text-foreground leading-relaxed">
-          {message.message_text}
-        </div>
-      )}
-      <div className="ml-8 mt-1 flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] text-muted-foreground font-mono truncate max-w-[200px]">
-          {message.message_id || "no-id"}
-        </span>
-        {message.attachments?.length > 0 && (
-          <Badge variant="secondary" className="text-[11px] h-4 px-1">
-            📎 {message.attachments.length} attachment
-            {message.attachments.length > 1 ? "s" : ""}
-          </Badge>
-        )}
-      </div>
-    </div>
-  );
-};
 
 const StatCard: React.FC<{
   icon: React.ReactNode;
@@ -265,9 +203,9 @@ const WebhookTab: React.FC = () => {
       )}
 
       {/* Middle section: AI Agent + Controls side by side on wide screens, stacked on narrow */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 shrink-0">
+      <div className="grid grid-cols-1 shrink-0">
         {/* Controls card */}
-        <Card className="shadow-none border-border/60">
+        <Card className="shadow-none border-border/60 gap-0 py-0">
           <CardHeader className="px-3 pb-1.5 pt-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -367,7 +305,7 @@ const WebhookTab: React.FC = () => {
       </div>
 
       {/* Messages card — flex-1 + min-h-0 fills remaining space, ScrollArea handles overflow */}
-      <Card className="shadow-none border-border/60 flex-1 min-h-0 flex flex-col overflow-hidden">
+      <Card className="shadow-none border-border/60 flex-1 min-h-0 flex flex-col overflow-hidden gap-0 py-0">
         <CardHeader className="px-3 pb-1.5 pt-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -393,7 +331,7 @@ const WebhookTab: React.FC = () => {
         {/* Only this ScrollArea scrolls */}
         <CardContent className="flex-1 min-h-0 p-0 overflow-hidden">
           <ScrollArea className="h-full">
-            <div className="px-3 py-1">
+            <div className="px-3 py-2 flex flex-col justify-evenly gap-2">
               {initialLoading ? (
                 <MessageSkeleton />
               ) : sortedWebhook.length === 0 ? (
