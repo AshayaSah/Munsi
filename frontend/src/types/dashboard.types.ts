@@ -77,6 +77,8 @@ export interface WebhookMessage {
   message_text: string;
   attachments: WebhookAttachment[];
   timestamp: number;
+  ai_reply: string | null;
+  ai_status: string | null;
 }
 
 export interface WebhookMessagesResponse {
@@ -124,7 +126,7 @@ export interface ConversationListItemProps {
   conversation: Conversation;
   isSelected: boolean;
   onSelect: (id: string, participants: ConversationParticipant[]) => void;
-  isLoading: boolean;
+  isLoading?: boolean;
 }
 
 export interface WebhookMessageItemProps {

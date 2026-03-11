@@ -143,34 +143,46 @@ const ConversationListItem: React.FC<
   </button>
 );
 
-const Bubble: React.FC<BubbleProps> = ({ message, isFromPage }) => (
-  <div className={cn("flex", isFromPage ? "justify-end" : "justify-start")}>
-    <div className="max-w-[72%]">
+const Bubble: React.FC<BubbleProps> = ({ message, isFromPage }) => {
+  console.log(message);
+
+  return (
+    <div
+      className={cn(
+        "flex w-full",
+        isFromPage ? "justify-end" : "justify-start",
+      )}
+    >
       <div
-        className={cn(
-          "rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm",
-          isFromPage
-            ? "bg-primary text-primary-foreground rounded-br-sm"
-            : "bg-muted text-foreground rounded-bl-sm",
-        )}
+        className={cn("max-w-[72%]", isFromPage ? "items-end" : "items-start")}
       >
-        {message.message || "(No text content)"}
+        <div
+          className={cn(
+            "rounded-2xl px-3.5 py-2 text-sm leading-relaxed shadow-sm break-words",
+            isFromPage
+              ? "bg-primary text-primary-foreground rounded-br-sm"
+              : "bg-muted text-foreground rounded-bl-sm",
+          )}
+        >
+          {message.message || "(No text content)"}
+        </div>
+
+        <p
+          className={cn(
+            "mt-1 text-[11px] text-muted-foreground w-full",
+            isFromPage ? "text-right" : "text-left",
+          )}
+        >
+          {message.from?.name} ·{" "}
+          {new Date(message.created_time).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </p>
       </div>
-      <p
-        className={cn(
-          "mt-1 text-[11px] text-muted-foreground",
-          isFromPage ? "text-right" : "text-left",
-        )}
-      >
-        {message.from?.name} ·{" "}
-        {new Date(message.created_time).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
-      </p>
     </div>
-  </div>
-);
+  );
+};
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 

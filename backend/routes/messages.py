@@ -55,10 +55,11 @@ async def get_recent_messages(
     from sqlalchemy.orm import selectinload
     from models import Message
 
+    # Get user messages
     query = (
         select(Message)
         .options(selectinload(Message.user))
-        .where(Message.from_role == "user")   # only incoming, same as old behavior
+        .where(Message.from_role == "user")
         .order_by(desc(Message.sent_at))
         .limit(limit)
     )
@@ -66,18 +67,33 @@ async def get_recent_messages(
         query = query.where(Message.page_id == page_id)
 
     result = await db.execute(query)
-    messages = result.scalars().all()
+    user_messages = result.scalars().all()
 
-    data = [
-        {
+    # For each user message, find the next AI reply using row id (more reliable than timestamp)
+    data = []
+    for m in user_messages:
+        ai_result = await db.execute(
+            select(Message)
+            .where(
+                Message.user_id == m.user_id,
+                Message.page_id == m.page_id,
+                Message.from_role == "ai",
+                Message.id > m.id,  # 👈 use id instead of timestamp
+            )
+            .order_by(Message.id.asc())  # 👈 closest next row
+            .limit(1)
+        )
+        ai_msg = ai_result.scalar_one_or_none()
+
+        data.append({
             "sender_id": m.user.user_id if m.user else str(m.user_id),
             "recipient_id": m.page_id,
             "message_id": m.fb_message_id,
             "message_text": m.content,
             "attachments": None,
             "timestamp": int(m.sent_at.timestamp() * 1000) if m.sent_at else None,
-        }
-        for m in messages
-    ]
+            "ai_reply": ai_msg.content if ai_msg else None,
+            "ai_status": ai_msg.status if ai_msg else None,
+        })
 
     return {"messages": data, "count": len(data)}
