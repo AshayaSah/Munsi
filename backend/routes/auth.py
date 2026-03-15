@@ -13,6 +13,7 @@ from services.facebook import (
     get_user_pages,
     subscribe_page_to_webhook,
 )
+from urllib.parse import quote
 
 router = APIRouter(prefix="/auth/facebook", tags=["auth"])
 settings = get_settings()
@@ -52,6 +53,8 @@ async def facebook_callback(code: str, db: AsyncSession = Depends(get_db)):
     # 2. Get logged-in user info
     user_info = await get_me(user_access_token)
     user_fb_id = user_info.get("id")
+    user_name = user_info.get("name", "")
+    user_avatar = user_info.get("picture", {}).get("data", {}).get("url", "")
 
     # 3. Fetch pages the user manages
     pages = await get_user_pages(user_access_token)
@@ -84,5 +87,7 @@ async def facebook_callback(code: str, db: AsyncSession = Depends(get_db)):
         f"?user_id={user_fb_id}"
         f"&access_token={user_access_token}"
         f"&logged_in=true"
+        f"&name={quote(user_name)}"
+        f"&avatar={quote(user_avatar)}"
     )
     return RedirectResponse(url=frontend_url)

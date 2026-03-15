@@ -46,16 +46,11 @@ const parseOAuthParams = (): AuthUser | null => {
   const userId = params.get("user_id");
   const loggedIn = params.get("logged_in");
   const accessToken = params.get("access_token");
-
-  // console.log("[Auth] URL params on load:", {
-  //   userId,
-  //   loggedIn,
-  //   hasToken: !!accessToken,
-  //   fullSearch: window.location.search,
-  // });
+  const name = params.get("name") ?? undefined;
+  const avatar = params.get("avatar") ?? undefined;
 
   if (userId && loggedIn === "true" && accessToken) {
-    return { userId, accessToken };
+    return { userId, accessToken, name, avatar };
   }
 
   return null;

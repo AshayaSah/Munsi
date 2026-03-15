@@ -3,6 +3,8 @@
 export interface AuthUser {
   userId: string;
   accessToken: string;
+  name?: string;
+  avatar?: string;
 }
 
 export interface AuthContextType {

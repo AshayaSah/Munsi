@@ -25,7 +25,7 @@ async def get_me(access_token: str) -> dict:
     async with httpx.AsyncClient() as client:
         r = await client.get(
             f"{FB_GRAPH}/me",
-            params={"access_token": access_token, "fields": "id,name,email"},
+            params={"access_token": access_token, "fields": "id,name,email,picture"},
         )
         r.raise_for_status()
         return r.json()

@@ -1,0 +1,25 @@
+{
+  "name": "munsi",
+  "version": "1.0.0",
+  "description": "AI Assistant for Messenger",
+  "homepage": "https://github.com/AshayaSah/Munsi",
+  "bugs": {
+    "url": "https://github.com/AshayaSah/Munsi/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AshayaSah/Munsi.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "frontend": "cd frontend && npm run dev",
+    "backend": "cd backend && venv\\Scripts\\uvicorn main:app --reload",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
