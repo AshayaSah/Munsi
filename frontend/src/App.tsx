@@ -10,6 +10,8 @@ import HomeDashboard from "./pages/HomeDashboard";
 import Login from "./pages/Login";
 import MessengerTab from "@/components/MessengerTab";
 import WebhookTab from "@/components/WebhookTab";
+import SalesLeadsTable from "./components/SalesLeadsTable";
+import AdminPage from "./pages/AdminPage";
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
 
@@ -45,7 +47,10 @@ const AppRoutes = () => {
       >
         <Route path="messenger" element={<MessengerTab />} />
         <Route path="auto_messenger" element={<WebhookTab />} />
+        <Route path="leads" element={<SalesLeadsTable />} />
       </Route>
+
+      <Route path="/admin" element={<AdminPage />} />
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
