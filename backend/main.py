@@ -10,6 +10,7 @@ from routes.messages import router as messages_router
 from routes.pages import router as pages_router
 from routes.ai import router as ai_router
 from admin.admin import setup_admin
+from routes.leads import router as leads_router
 
 
 @asynccontextmanager
@@ -45,6 +46,7 @@ app.include_router(webhook_router)
 app.include_router(messages_router)
 app.include_router(pages_router)
 app.include_router(ai_router)
+app.include_router(leads_router)
 
 # ── Admin panel at /admin ────────────────────────────────────────────────
 setup_admin(app, engine)

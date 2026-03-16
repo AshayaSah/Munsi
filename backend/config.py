@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     FB_APP_ID: str = ""
     FB_APP_SECRET: str = ""
     FB_REDIRECT_URI: str = "http://localhost:8000/auth/facebook/callback"
-    WEBHOOK_VERIFY_TOKEN: str = "SIUUU"
+    WEBHOOK_VERIFY_TOKEN: str = ""
 
     # Gemini
     GEMINI_API_KEY: str = ""
