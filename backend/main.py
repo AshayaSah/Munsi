@@ -11,6 +11,7 @@ from routes.pages import router as pages_router
 from routes.ai import router as ai_router
 from admin.admin import setup_admin
 from routes.leads import router as leads_router
+from routes.admin import router as admin_router
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ app.include_router(messages_router)
 app.include_router(pages_router)
 app.include_router(ai_router)
 app.include_router(leads_router)
+app.include_router(admin_router)
 
 # ── Admin panel at /admin ────────────────────────────────────────────────
 setup_admin(app, engine)

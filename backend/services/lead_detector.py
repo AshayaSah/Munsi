@@ -4,7 +4,7 @@ services/lead_detector.py
 Agentic lead-detection layer.
 
 After every AI reply, call `detect_and_upsert_lead()`. It will:
-  1. Ask Claude/Groq to analyse the recent conversation for buying intent.
+  1. Ask Groq to analyse the recent conversation for buying intent.
   2. Extract structured order details (name, phone, address, product, notes).
   3. Upsert a SalesLead row — create on first detection, update on each
      subsequent message as more details arrive.
@@ -57,7 +57,7 @@ Status rules:
 - "cancelled"   → customer said they no longer want it or stopped engaging negatively
 
 Set has_intent=false and status="interested" with confidence<0.3 if there is
-no buying signal at all.  In that case all other fields should be null.
+no buying signal at all. In that case all other fields should be null.
 """.strip()
 
 
@@ -80,7 +80,7 @@ async def detect_and_upsert_lead(
     latest_message: str,
     *,
     groq_api_key: str | None = None,
-    groq_model: str = "llama3-8b-8192",
+    groq_model: str = "llama-3.3-70b-versatile",   # same model as ai_service.py
 ) -> SalesLead | None:
     """
     Detect buying intent in the conversation and upsert a SalesLead.
@@ -168,7 +168,15 @@ async def detect_and_upsert_lead(
     return lead
 
 
-# ── Detection model call (Groq) ───────────────────────────────────────────────
+# ── Detection model call (Groq SDK — same as ai_service.py) ──────────────────
+
+def _get_groq_client(api_key: str | None = None):
+    """Reuse the same Groq SDK your ai_service.py already uses."""
+    from groq import Groq
+    from config import get_settings
+    key = api_key or get_settings().GROQ_API_KEY
+    return Groq(api_key=key)
+
 
 async def _call_detection_model(
     history: list[dict],
@@ -177,51 +185,42 @@ async def _call_detection_model(
     groq_model: str,
 ) -> dict:
     """
-    Call the Groq API (same provider you already use) for lead extraction.
-    Falls back to the GROQ_API_KEY from environment if not passed explicitly.
+    Uses the groq SDK (same as ai_service.py) so the API key is read
+    from config/settings — no raw httpx, no os.environ needed.
     """
-    import os
-    import httpx
+    import asyncio
 
-    api_key = groq_api_key or os.environ.get("GROQ_API_KEY", "")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY not set — cannot run lead detection")
-
+    client = _get_groq_client(groq_api_key)
     conversation_text = _build_conversation_text(history, latest_message)
 
-    payload = {
-        "model": groq_model,
-        "temperature": 0,           # deterministic JSON extraction
-        "max_tokens": 400,
-        "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    "Here is the conversation:\n\n"
-                    f"{conversation_text}\n\n"
-                    "Return the JSON object now."
-                ),
-            },
-        ],
-    }
-
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
+    # groq SDK is sync — run it in a thread so we don't block the event loop
+    def _sync_call() -> str:
+        response = client.chat.completions.create(
+            model=groq_model,
+            temperature=0,        # deterministic JSON extraction
+            max_tokens=400,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        "Here is the conversation:\n\n"
+                        f"{conversation_text}\n\n"
+                        "Return the JSON object now."
+                    ),
+                },
+            ],
         )
-        resp.raise_for_status()
-        raw_text: str = resp.json()["choices"][0]["message"]["content"].strip()
+        return response.choices[0].message.content or ""
+
+    raw_text = await asyncio.get_event_loop().run_in_executor(None, _sync_call)
+    raw_text = raw_text.strip()
 
     # Strip accidental markdown fences
     if raw_text.startswith("```"):
         raw_text = raw_text.split("```")[1]
         if raw_text.startswith("json"):
             raw_text = raw_text[4:]
+    raw_text = raw_text.strip()
 
     return json.loads(raw_text)
