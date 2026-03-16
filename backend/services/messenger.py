@@ -6,6 +6,7 @@ Orchestrates the full auto-reply pipeline:
   4. Send reply via FB Graph API
   5. Save outgoing Message
   6. Update Log as processed
+  7. [NEW] Detect buying intent → upsert SalesLead
 """
 import json
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models import Page, User, Message, Log
 from services.facebook import send_message
 from services.ai_service import get_ai_reply
+from services.lead_detector import detect_and_upsert_lead   # ← NEW
 
 
 async def handle_incoming_message(
@@ -108,6 +110,27 @@ async def handle_incoming_message(
 
         # ── 9. Mark log processed ─────────────────────────────────
         await _mark_log(db, log_id, processed=True)
+
+        # ── 10. [NEW] Detect buying intent & upsert SalesLead ─────
+        # Runs after the reply is sent so it never delays the response.
+        # Passes the same `history` list already built above — no extra DB query.
+        try:
+            lead = await detect_and_upsert_lead(
+                db=db,
+                page_id=page_id,
+                user_id=user.id,            # internal DB id, not FB sender_id
+                history=history,
+                latest_message=message_text,
+            )
+            if lead:
+                print(
+                    f"🛒 Lead upserted → id={lead.id} status={lead.status} "
+                    f"confidence={lead.confidence:.2f} name={lead.customer_name}"
+                )
+        except Exception as lead_err:
+            # Lead detection failure must NEVER break the main pipeline
+            print(f"⚠️  Lead detection error (non-fatal): {lead_err}")
+
         await db.commit()
         print(f"✅ Auto-reply sent to {sender_id}: {ai_text[:60]}…")
 

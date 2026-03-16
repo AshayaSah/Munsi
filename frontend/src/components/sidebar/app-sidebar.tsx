@@ -35,7 +35,7 @@ const data = {
   navMain: [
     {
       title: "Home",
-      url: "/home",
+      url: "/home/leads",
       icon: Home,
       isActive: true,
     },
