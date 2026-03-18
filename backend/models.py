@@ -17,6 +17,7 @@ class Page(Base):
     access_token: Mapped[str] = mapped_column(Text)
     ai_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    user_fb_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True) 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
