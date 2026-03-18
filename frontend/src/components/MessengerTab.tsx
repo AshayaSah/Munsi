@@ -328,9 +328,9 @@ const MessengerTab: React.FC = () => {
       h-full fills the parent container exactly.
       overflow-hidden stops this from growing the page.
     */
-    <div className="flex h-full min-h-0 overflow-hidden rounded-lg border bg-background">
+    <div className="flex h-full min-h-0 overflow-hidden bg-background">
       {/* ── Left sidebar ─────────────────────────────────────────────────── */}
-      <div className="flex md:w-64 shrink-0 flex-col gap-2.5 border-r pr-3 min-h-0 overflow-hidden">
+      <div className="flex md:w-64 shrink-0 flex-col gap-2.5 pr-3 min-h-0 overflow-hidden">
         {/* Error banner */}
         {error && (
           <Alert variant="destructive" className="py-2 shrink-0">
@@ -463,7 +463,7 @@ const MessengerTab: React.FC = () => {
       </div>
 
       {/* ── Chat panel ───────────────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+      <Card className="flex flex-1 flex-col min-h-0 overflow-hidden p-0">
         {loadingMessages ? (
           <>
             <div className="flex items-center justify-between border-b bg-card px-5 py-3 shrink-0">
@@ -602,7 +602,7 @@ const MessengerTab: React.FC = () => {
             )}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 };
