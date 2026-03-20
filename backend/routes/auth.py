@@ -39,10 +39,6 @@ def facebook_login():
 
 @router.get("/callback")
 async def facebook_callback(code: str, db: AsyncSession = Depends(get_db)):
-    """
-    Exchange code → access token, save pages to DB,
-    subscribe each page to the webhook, then redirect to frontend.
-    """
     if not code:
         raise HTTPException(status_code=400, detail="No authorization code provided")
 
@@ -58,30 +54,42 @@ async def facebook_callback(code: str, db: AsyncSession = Depends(get_db)):
 
     # 3. Fetch pages the user manages
     pages = await get_user_pages(user_access_token)
+    incoming_page_ids = {p["id"] for p in pages}
 
+    # 4. Deactivate pages owned by this user that were NOT returned this session
+    result = await db.execute(
+        select(Page).where(Page.user_fb_id == user_fb_id)
+    )
+    existing_pages = result.scalars().all()
+
+    for page in existing_pages:
+        if page.id not in incoming_page_ids:
+            page.is_active = False  # Stale — deactivate instead of leaving it live
+
+    # 5. Upsert pages returned in this session
     for page_data in pages:
         page_id = page_data["id"]
         page_token = page_data.get("access_token", user_access_token)
 
-        # 4. Upsert page in DB
         existing: Page | None = await db.get(Page, page_id)
         if existing:
             existing.name = page_data.get("name", existing.name)
             existing.access_token = page_token
+            existing.is_active = True  # Re-activate in case it was previously deactivated
+            existing.user_fb_id = user_fb_id
         else:
             new_page = Page(
                 id=page_id,
                 name=page_data.get("name", "Unknown Page"),
                 access_token=page_token,
                 is_active=True,
+                user_fb_id=user_fb_id,  # Track ownership
             )
             db.add(new_page)
-            # 5. Subscribe NEW pages to webhook automatically
             await subscribe_page_to_webhook(page_id, page_token)
 
     await db.commit()
 
-    # Redirect to frontend with user context
     frontend_url = (
         f"http://localhost:5173"
         f"?user_id={user_fb_id}"

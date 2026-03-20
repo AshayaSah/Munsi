@@ -28,12 +28,12 @@ const AppRoutes = () => {
   return (
     <Routes>
       {/* Redirect root to /home */}
-      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/" element={<Navigate to="/home/leads" replace />} />
 
       {/* Login — redirect away if already authenticated */}
       <Route
         path="/login"
-        element={isLoggedIn ? <Navigate to="/home" replace /> : <Login />}
+        element={isLoggedIn ? <Navigate to="/home/leads" replace /> : <Login />}
       />
 
       {/* /home — shell stays mounted, inner content changes by nested route */}
