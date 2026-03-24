@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -925,6 +926,13 @@ function LeadsTab({ token }: { token: string }) {
     fetch();
   }
 
+  async function deleteLead(id: number) {
+    await api(`/leads/${id}`, token, {
+      method: "DELETE",
+    });
+    fetch();
+  }
+
   const statuses = [
     "all",
     "interested",
@@ -1054,6 +1062,13 @@ function LeadsTab({ token }: { token: string }) {
                                 Mark as {s}
                               </DropdownMenuItem>
                             ))}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => deleteLead(l.id)}
+                          >
+                            Delete
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
