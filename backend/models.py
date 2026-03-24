@@ -12,18 +12,17 @@ class Page(Base):
     """One row per Facebook Page."""
     __tablename__ = "pages"
 
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)          # FB Page ID
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(256))
     access_token: Mapped[str] = mapped_column(Text)
     ai_instructions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    user_fb_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True) 
+    user_fb_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    # relationships
     users: Mapped[list["User"]] = relationship("User", back_populates="page", cascade="all, delete-orphan")
     messages: Mapped[list["Message"]] = relationship("Message", back_populates="page", cascade="all, delete-orphan")
     logs: Mapped[list["Log"]] = relationship("Log", back_populates="page", cascade="all, delete-orphan")
@@ -31,7 +30,13 @@ class Page(Base):
 
 
 class User(Base):
-    """One row per (user_id, page_id) pair."""
+    """
+    One row per (user_id, page_id) pair.
+
+    Contact memory fields (phone_number, delivery_address) are stored here
+    so they are remembered across all orders and pre-filled into new leads.
+    The lead detector updates these whenever it extracts fresher values.
+    """
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -40,6 +45,14 @@ class User(Base):
     last_seen: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # ── Persistent contact memory ─────────────────────────────────────────────
+    # These are updated every time the detector finds a cleaner value.
+    # They are injected into the AI system prompt for new conversations so the
+    # bot can say "shall I use your previous address?" rather than asking again.
+    remembered_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    remembered_phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    remembered_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     page: Mapped["Page"] = relationship("Page", back_populates="users")
     messages: Mapped[list["Message"]] = relationship("Message", back_populates="user")
@@ -79,21 +92,25 @@ class Log(Base):
 
 class SalesLead(Base):
     """
-    Detected sales opportunity extracted from a Messenger conversation.
+    One row per ORDER (not per user).
 
-    Lead status lifecycle:
-      interested → collecting → pending → confirmed
-                                        → cancelled
+    Each distinct order the customer places gets its own SalesLead row,
+    identified by order_ref_id (a short human-readable key like "ORD-0001").
+
+    Multiple orders from the same user are linked via user_id.
+    An order that replaces/cancels another references it via parent_lead_id.
+
+    Status lifecycle:
+        interested → collecting → pending → confirmed → delivered
+                                                      → cancelled
     """
     __tablename__ = "sales_leads"
 
-    # ── Primary key ───────────────────────────────────────────────────────────
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
-    # ── Foreign keys — both reference "pages.id" (the actual PK column name) ──
     page_id: Mapped[str] = mapped_column(
         String(64),
-        ForeignKey("pages.id", ondelete="CASCADE"),   # ← was "pages.page_id" (wrong)
+        ForeignKey("pages.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -102,6 +119,17 @@ class SalesLead(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+
+    # ── Per-order identity ────────────────────────────────────────────────────
+    # A short, stable key assigned when the order is first created so the AI
+    # and detector can reference a specific order across messages.
+    # Format: "ORD-<4-digit-zero-padded-id>" assigned after first flush.
+    order_ref_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+
+    # Links to a previous order this one modifies or replaces (optional).
+    parent_lead_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("sales_leads.id", ondelete="SET NULL"), nullable=True
     )
 
     # ── Lead status ───────────────────────────────────────────────────────────
@@ -113,22 +141,22 @@ class SalesLead(Base):
     )
 
     # ── Customer / order details ──────────────────────────────────────────────
-    customer_name: Mapped[str | None]      = mapped_column(String(255), nullable=True)
-    phone_number: Mapped[str | None]       = mapped_column(String(50),  nullable=True)
-    delivery_address: Mapped[str | None]   = mapped_column(Text,        nullable=True)
-    product_interest: Mapped[str | None]   = mapped_column(Text,        nullable=True)
-    order_notes: Mapped[str | None]        = mapped_column(Text,        nullable=True)
-    raw_extracted_json: Mapped[str | None] = mapped_column(Text,        nullable=True)
+    customer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    delivery_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    product_interest: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    order_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    raw_extracted_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # ── Confidence & trigger ──────────────────────────────────────────────────
-    confidence: Mapped[float | None]     = mapped_column(Float,  nullable=True)
-    trigger_message: Mapped[str | None]  = mapped_column(Text,   nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    trigger_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # ── Timestamps ────────────────────────────────────────────────────────────
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),  # ← timezone now imported
+        default=lambda: datetime.now(timezone.utc),
         server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
@@ -143,8 +171,13 @@ class SalesLead(Base):
     page: Mapped["Page"] = relationship("Page", back_populates="sales_leads")
     user: Mapped["User"] = relationship("User", back_populates="sales_leads")
 
+    # Self-referential: child orders can reference a parent order
+    parent_lead: Mapped[Optional["SalesLead"]] = relationship(
+        "SalesLead", remote_side="SalesLead.id", foreign_keys=[parent_lead_id]
+    )
+
     def __repr__(self) -> str:
         return (
-            f"<SalesLead id={self.id} status={self.status!r} "
-            f"user_id={self.user_id} page={self.page_id!r}>"
+            f"<SalesLead id={self.id} ref={self.order_ref_id!r} "
+            f"status={self.status!r} user_id={self.user_id}>"
         )

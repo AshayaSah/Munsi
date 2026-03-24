@@ -226,7 +226,6 @@ async def update_user(user_id: int, body: UserUpdate, db: AsyncSession = Depends
     await db.refresh(u)
     return UserOut.model_validate(u)
 
-
 # ── Messages ──────────────────────────────────────────────────────────────────
 
 @router.get("/messages", dependencies=[Depends(require_admin)])
@@ -304,3 +303,12 @@ async def update_lead(lead_id: int, body: SalesLeadUpdate, db: AsyncSession = De
     await db.commit()
     await db.refresh(lead)
     return SalesLeadOut.model_validate(lead)
+
+@router.delete("/leads/{lead_id}", dependencies=[Depends(require_admin)])
+async def delete_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
+    lead = await db.get(SalesLead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    await db.delete(lead)
+    await db.commit()
+    return {"deleted": True, "lead_id": lead_id}

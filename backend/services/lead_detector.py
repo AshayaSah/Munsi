@@ -1,68 +1,54 @@
 """
 services/lead_detector.py
 
-Agentic lead-detection layer.
+Lead creation fires ONLY when the AI emits <!--ORDER_CONFIRMED-->.
 
-After every AI reply, call `detect_and_upsert_lead()`. It will:
-  1. Ask Groq to analyse the recent conversation for buying intent.
-  2. Extract structured order details (name, phone, address, product, notes).
-  3. Upsert a SalesLead row — create on first detection, update on each
-     subsequent message as more details arrive.
-
-The detector uses a SEPARATE, cheap AI call (not the reply call) so the
-main reply pipeline is never slowed down — it runs inside the same
-background task after the reply is sent.
+That means this module is called once per confirmed order, not on every message.
+It looks back through the full conversation history to extract the structured
+order details (name, phone, address, product) that were collected during the chat.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import SalesLead
+from models import SalesLead, User
 
 logger = logging.getLogger(__name__)
 
-# ── Prompt ────────────────────────────────────────────────────────────────────
+_EXTRACTION_PROMPT = """
+You are an order-detail extraction agent.
 
-_SYSTEM_PROMPT = """
-You are an order-detection agent for a Facebook Messenger sales bot.
+You will be given a conversation between a customer and a sales bot.
+The order has already been confirmed by the customer.
 
-Analyse the conversation below and decide whether the customer has shown
-buying intent or has already provided order details.
-
-Return ONLY a valid JSON object — no markdown, no explanation — with these keys:
+Extract the final, confirmed order details and return ONLY a valid JSON object
+with no markdown fences, no explanation, just the JSON:
 
 {
-  "has_intent": true | false,
-  "status": "interested" | "collecting" | "pending" | "confirmed" | "cancelled",
-  "confidence": 0.0–1.0,
-  "customer_name": string | null,
-  "phone_number": string | null,
+  "phone_number":     string | null,
   "delivery_address": string | null,
   "product_interest": string | null,
-  "order_notes": string | null
+  "order_notes":      string | null
 }
 
-Status rules:
-- "interested"  → customer asked about price, availability, or showed general interest
-- "collecting"  → customer started giving details but info is still incomplete
-- "pending"     → customer provided name + phone OR address — enough to follow up
-- "confirmed"   → customer explicitly confirmed the order or said "yes, I'll take it"
-- "cancelled"   → customer said they no longer want it or stopped engaging negatively
-
-Set has_intent=false and status="interested" with confidence<0.3 if there is
-no buying signal at all. In that case all other fields should be null.
+Rules:
+- Use only information explicitly stated in the conversation.
+- If the customer corrected a detail (e.g. gave a new address), use the LATEST value.
+- Do not invent or guess any field. Use null if not found.
+- product_interest should include the product name and quantity if mentioned.
+- Do not extract or store customer names.
+- delivery_address should be as complete as possible.
 """.strip()
 
 
-def _build_conversation_text(history: list[dict[str, str]], latest_message: str) -> str:
-    lines: list[str] = []
+def _build_conversation_text(history: list[dict], latest_message: str) -> str:
+    lines = []
     for msg in history:
         role = "Customer" if msg["role"] == "user" else "Bot"
         lines.append(f"{role}: {msg['content']}")
@@ -70,157 +56,189 @@ def _build_conversation_text(history: list[dict[str, str]], latest_message: str)
     return "\n".join(lines)
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────
+def _fb_messages_to_history(fb_response: dict, page_id: str) -> list[dict]:
+    """
+    Convert the Facebook Graph API response from get_conversation_messages()
+    into the same [{"role": ..., "content": ...}] format used throughout.
 
-async def detect_and_upsert_lead(
+    The page itself is the "assistant" — any sender whose id matches page_id
+    is the bot. Everyone else is the customer.
+
+    FB returns messages newest-first, so we reverse to get chronological order.
+    """
+    raw_messages = (
+        fb_response.get("messages", {}).get("data", [])
+    )
+    # Reverse so oldest message is first (chronological)
+    raw_messages = list(reversed(raw_messages))
+
+    history = []
+    for msg in raw_messages:
+        text = msg.get("message", "").strip()
+        if not text:
+            continue
+        sender_id = msg.get("from", {}).get("id", "")
+        role = "assistant" if sender_id == page_id else "user"
+        history.append({"role": role, "content": text})
+
+    return history
+
+
+async def _fetch_fb_history(
+    page_access_token: str,
+    conversation_id: str,
+    page_id: str,
+) -> list[dict]:
+    """
+    Fetch the full conversation from Facebook and return it as a history list.
+    Falls back to an empty list if the fetch fails so lead creation still works.
+    """
+    from services.facebook import get_conversation_messages
+    try:
+        fb_response = await get_conversation_messages(page_access_token, conversation_id)
+        return _fb_messages_to_history(fb_response, page_id)
+    except Exception:
+        logger.warning("FB conversation fetch failed — falling back to DB history")
+        return []
+
+
+def _merge_histories(fb_history: list[dict], db_history: list[dict]) -> list[dict]:
+    """
+    Merge FB and DB histories, preferring FB as the source of truth.
+
+    If FB returned messages, use them directly — they are the real conversation.
+    DB history is only used as a fallback when FB fetch failed or returned empty.
+    """
+    if fb_history:
+        return fb_history
+    return db_history
+
+
+async def create_lead_from_confirmed_order(
     db: AsyncSession,
     page_id: str,
-    user_id: int,              # internal DB user.id (not FB sender_id)
-    history: list[dict],       # same history list already built in messenger.py
+    user_id: int,
+    history: list[dict],
     latest_message: str,
     *,
+    page_access_token: str | None = None,
+    conversation_id: str | None = None,
     groq_api_key: str | None = None,
-    groq_model: str = "llama-3.3-70b-versatile",   # same model as ai_service.py
-) -> SalesLead | None:
+    groq_model: str = "llama-3.3-70b-versatile",
+) -> SalesLead:
     """
-    Detect buying intent in the conversation and upsert a SalesLead.
+    Called exactly once when the customer confirms an order.
 
-    Returns the SalesLead row (new or updated), or None if no intent found
-    and no existing lead to update.
+    Fetches the full conversation from Facebook (if access_token +
+    conversation_id are provided) for richer context, falls back to the
+    DB history slice passed in from messenger.py, then extracts structured
+    order details and creates a confirmed SalesLead row.
     """
+    # -- Fetch FB conversation for richer context -----------------------------
+    if page_access_token and conversation_id:
+        fb_history = await _fetch_fb_history(
+            page_access_token=page_access_token,
+            conversation_id=conversation_id,
+            page_id=page_id,
+        )
+    else:
+        fb_history = []
+
+    # FB is source of truth; DB history is the fallback
+    rich_history = _merge_histories(fb_history, history)
+
+    # -- Extract order details from conversation ------------------------------
     try:
-        extraction = await _call_detection_model(
-            history=history,
+        details = await _extract_order_details(
+            history=rich_history,
             latest_message=latest_message,
             groq_api_key=groq_api_key,
             groq_model=groq_model,
         )
     except Exception:
-        logger.exception("Lead detection model call failed — skipping lead upsert")
-        return None
+        logger.exception("Order detail extraction failed — creating lead with nulls")
+        details = {}
 
-    has_intent: bool = extraction.get("has_intent", False)
-    confidence: float = float(extraction.get("confidence", 0.0))
-    status: str = extraction.get("status", "interested")
-
-    # ── Check if a lead already exists for this user+page ────────────────────
-    result = await db.execute(
-        select(SalesLead)
-        .where(SalesLead.user_id == user_id, SalesLead.page_id == page_id)
-        .order_by(SalesLead.detected_at.desc())
-        .limit(1)
+    # ── Create the lead ───────────────────────────────────────────────────────
+    lead = SalesLead(
+        page_id=page_id,
+        user_id=user_id,
+        status="confirmed",
+        confidence=1.0,                        # customer explicitly said yes
+        trigger_message=latest_message[:500],
+        raw_extracted_json=json.dumps(details),
+        detected_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+        phone_number=details.get("phone_number"),
+        delivery_address=details.get("delivery_address"),
+        product_interest=details.get("product_interest"),
+        order_notes=details.get("order_notes"),
     )
-    existing: SalesLead | None = result.scalar_one_or_none()
+    db.add(lead)
+    await db.flush()   # get lead.id
 
-    # Don't create a new lead for low-confidence non-intent signals
-    if not has_intent and confidence < 0.4 and existing is None:
-        return None
+    lead.order_ref_id = f"ORD-{lead.id:04d}"
 
-    # ── Build field updates ───────────────────────────────────────────────────
-    updates: dict[str, Any] = {
-        "status": status,
-        "confidence": confidence,
-        "trigger_message": latest_message[:500],
-        "raw_extracted_json": json.dumps(extraction),
-        "updated_at": datetime.now(timezone.utc),
-    }
+    # ── Update User contact memory ────────────────────────────────────────────
+    user: User | None = await db.get(User, user_id)
+    if user:
+        if lead.phone_number:
+            user.remembered_phone = lead.phone_number
+        if lead.delivery_address:
+            user.remembered_address = lead.delivery_address
 
-    # Only overwrite detail fields if the new extraction actually found something
-    for field in ("customer_name", "phone_number", "delivery_address",
-                  "product_interest", "order_notes"):
-        value = extraction.get(field)
-        if value:
-            updates[field] = value
-
-    if existing:
-        # Patch existing lead — never downgrade a confirmed/pending status
-        _PRIORITY = {"cancelled": 0, "interested": 1, "collecting": 2,
-                     "pending": 3, "confirmed": 4}
-        if _PRIORITY.get(status, 0) >= _PRIORITY.get(existing.status, 0):
-            updates["status"] = status
-        else:
-            updates.pop("status")  # keep the higher status
-
-        for k, v in updates.items():
-            setattr(existing, k, v)
-
-        lead = existing
-        logger.info(
-            "🔄 SalesLead #%s updated → status=%s confidence=%.2f",
-            lead.id, lead.status, lead.confidence,
-        )
-    else:
-        # Create brand-new lead
-        lead = SalesLead(
-            page_id=page_id,
-            user_id=user_id,
-            detected_at=datetime.now(timezone.utc),
-            **updates,
-        )
-        db.add(lead)
-        logger.info(
-            "🛒 New SalesLead created for user_id=%s page=%s status=%s confidence=%.2f",
-            user_id, page_id, status, confidence,
-        )
-
-    # Flush so the caller can access lead.id immediately if needed
     await db.flush()
+
+    logger.info(
+        "✅ New confirmed order %s created — user_id=%s product=%r name=%r",
+        lead.order_ref_id, user_id,
+        lead.product_interest, lead.customer_name,
+    )
     return lead
 
 
-# ── Detection model call (Groq SDK — same as ai_service.py) ──────────────────
+# ── Extraction model ──────────────────────────────────────────────────────────
 
 def _get_groq_client(api_key: str | None = None):
-    """Reuse the same Groq SDK your ai_service.py already uses."""
     from groq import Groq
     from config import get_settings
-    key = api_key or get_settings().GROQ_API_KEY
-    return Groq(api_key=key)
+    return Groq(api_key=api_key or get_settings().GROQ_API_KEY)
 
 
-async def _call_detection_model(
+async def _extract_order_details(
     history: list[dict],
     latest_message: str,
     groq_api_key: str | None,
     groq_model: str,
 ) -> dict:
-    """
-    Uses the groq SDK (same as ai_service.py) so the API key is read
-    from config/settings — no raw httpx, no os.environ needed.
-    """
-    import asyncio
-
     client = _get_groq_client(groq_api_key)
     conversation_text = _build_conversation_text(history, latest_message)
 
-    # groq SDK is sync — run it in a thread so we don't block the event loop
     def _sync_call() -> str:
         response = client.chat.completions.create(
             model=groq_model,
-            temperature=0,        # deterministic JSON extraction
-            max_tokens=400,
+            temperature=0,
+            max_tokens=300,
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": _EXTRACTION_PROMPT},
                 {
                     "role": "user",
                     "content": (
-                        "Here is the conversation:\n\n"
-                        f"{conversation_text}\n\n"
-                        "Return the JSON object now."
+                        f"Conversation:\n\n{conversation_text}\n\n"
+                        "Return the JSON now."
                     ),
                 },
             ],
         )
-        return response.choices[0].message.content or ""
+        return response.choices[0].message.content or "{}"
 
-    raw_text = await asyncio.get_event_loop().run_in_executor(None, _sync_call)
-    raw_text = raw_text.strip()
+    raw = await asyncio.get_event_loop().run_in_executor(None, _sync_call)
+    raw = raw.strip()
 
-    # Strip accidental markdown fences
-    if raw_text.startswith("```"):
-        raw_text = raw_text.split("```")[1]
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:]
-    raw_text = raw_text.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
 
-    return json.loads(raw_text)
+    return json.loads(raw)
