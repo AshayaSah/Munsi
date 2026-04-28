@@ -12,6 +12,7 @@ import MessengerTab from "@/components/MessengerTab";
 import WebhookTab from "@/components/WebhookTab";
 import SalesLeadsTable from "./components/SalesLeadsTable";
 import AdminPage from "./components/admin";
+import AnalyticsDashboard from "./components/AnalyticsTab";
 // import AdminPage from "./pages/AdminPage";
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ const AppRoutes = () => {
         <Route path="messenger" element={<MessengerTab />} />
         <Route path="auto_messenger" element={<WebhookTab />} />
         <Route path="leads" element={<SalesLeadsTable />} />
+        <Route path="analytics" element={<AnalyticsDashboard />} />
       </Route>
 
       {/* <Route path="/admin" element={<AdminPage />} /> */}
