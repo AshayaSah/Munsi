@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Atom,
+  BarChart,
   BookOpen,
   Bot,
   Command,
@@ -49,6 +50,12 @@ const data = {
       title: "Automation and AI",
       url: "/home/auto_messenger",
       icon: Atom,
+      isActive: true,
+    },
+    {
+      title: "Analytics",
+      url: "/home/analytics",
+      icon: BarChart,
       isActive: true,
     },
   ],
